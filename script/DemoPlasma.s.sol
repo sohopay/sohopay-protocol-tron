@@ -5,6 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 import {SohoTreasuryController} from "../src/SohoTreasuryController.sol";
@@ -12,7 +13,7 @@ import {SohoSettlement} from "../src/SohoSettlement.sol";
 import {SohoVault} from "../src/SohoVault.sol";
 import {SohoFirstLossReserve} from "../src/SohoFirstLossReserve.sol";
 import {Types} from "../src/libraries/Types.sol";
-import {MockUSDT} from "../test/mocks/MockUSDT.sol";
+import {MockUSDTNonStandard} from "../test/mocks/MockUSDTNonStandard.sol";
 
 /// @title  DemoPlasma — SOHOPay 5-act USDT demo on Plasma testnet (chain 9746)
 /// @notice Self-contained demo: deploys the audited stack (vendored from sohopay-protocol,
@@ -32,6 +33,8 @@ import {MockUSDT} from "../test/mocks/MockUSDT.sol";
 /// Env: DEPLOYER_PRIVATE_KEY, AGENT_PRIVATE_KEY, TRUSTED_SIGNER_PRIVATE_KEY,
 ///      USDC_ADDR (optional; blank → deploy MockUSDT), EXPECTED_CHAIN_ID (9746).
 contract DemoPlasma is Script {
+    using SafeERC20 for IERC20; // USDT (USDT0/MockUSDTNonStandard) returns no bool — approve via SafeERC20
+
     // identity-chain ids (demo fixtures)
     bytes32 constant OWNER_ID = keccak256("DEMO_OWNER");
     bytes32 constant BUSINESS_ID = keccak256("DEMO_BUSINESS");
@@ -83,11 +86,11 @@ contract DemoPlasma is Script {
         console2.log("== Act 1: Setup ==");
 
         // settlement asset: real token via env, else a fresh 6-dec mock.
-        address assetAddr = vm.envOr("USDC_ADDR", address(0));
+        address assetAddr = vm.envOr("USDT_ADDR", vm.envOr("USDC_ADDR", address(0)));
         if (assetAddr == address(0)) {
-            MockUSDT m = new MockUSDT();
-            assetAddr = address(m);
-            console2.log("MockUSDT:", assetAddr);
+            // Phase 1 default: non-standard USDT mock (no bool return — like real USDT).
+            assetAddr = address(new MockUSDTNonStandard());
+            console2.log("MockUSDTNonStandard:", assetAddr);
         }
         usdt = IERC20(assetAddr);
 
@@ -168,7 +171,7 @@ contract DemoPlasma is Script {
     function _act2_lend() internal {
         console2.log("== Act 2: Lend ==");
         _fund(deployer, LEND);
-        usdt.approve(address(vault), LEND);
+        usdt.forceApprove(address(vault), LEND);
         uint256 shares = vault.deposit(LEND, deployer);
         console2.log("deposited / svUSDT shares:", LEND, shares);
     }
@@ -211,7 +214,7 @@ contract DemoPlasma is Script {
         console2.log("== Act 4: Repay ==");
         uint96 outstanding = settlement.getAgent(AGENT_ID).outstandingDebt;
         _fund(deployer, outstanding);
-        usdt.approve(address(settlement), type(uint256).max);
+        usdt.forceApprove(address(settlement), type(uint256).max);
 
         settlement.repay(AGENT_ID, outstanding / 2); // partial ok
         console2.log("repaid (partial):", outstanding / 2);
@@ -281,8 +284,8 @@ contract DemoPlasma is Script {
     }
 
     function _fund(address to, uint256 amount) internal {
-        // mock path mints; with a real USDC_ADDR the deployer must already hold balance.
-        try MockUSDT(address(usdt)).mint(to, amount) {} catch {}
+        // mock path mints; with a real USDT_ADDR (USDT0) the operator must pre-fund balances.
+        try MockUSDTNonStandard(address(usdt)).mint(to, amount) {} catch {}
     }
 
     function _merchantPayout() internal view returns (address) {

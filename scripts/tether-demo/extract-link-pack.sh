@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Generate docs/tether-demo/LINK-PACK.md from Foundry broadcast artifacts (chain 9746).
+# Generate docs/tether-demo/LINK-PACK-PLASMA.md from Foundry broadcast artifacts (chain 9746).
 # Pulls deployed contract addresses + act tx hashes and renders Plasmascan links.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 command -v jq >/dev/null || { echo "error: jq required" >&2; exit 1; }
 
-EXPLORER="https://testnet.plasmascan.to"
-OUT="docs/tether-demo/LINK-PACK.md"
+EXPLORER="https://testnet.plasmascan.to"   # chain 9746 → Plasmascan testnet
+OUT="docs/tether-demo/LINK-PACK-PLASMA.md"
 SHA="$(sed -n 's/^# Commit: //p' SYNCED_FROM 2>/dev/null || echo unknown)"
 
 # newest broadcast for the demo (fall back to the prod deploy)
@@ -24,7 +24,7 @@ addr_of() { jq -r --arg n "$1" '[.transactions[] | select(.contractName==$n) | .
   echo ""
   echo "| Item | Address / Tx |"
   echo "|------|--------------|"
-  for pair in "USDT (MockUSDT):MockUSDT" \
+  for pair in "USDT (MockUSDTNonStandard/USDT0):MockUSDTNonStandard" \
               "Settlement proxy:ERC1967Proxy" \
               "Vault proxy:SohoVault" \
               "TreasuryController:SohoTreasuryController"; do

@@ -21,19 +21,22 @@ This repository is the **Plasma sibling** of [sohopay-protocol](https://github.c
 
 ## Status
 
-Scaffold + plan. See [`docs/PLASMA-IMPLEMENTATION-PLAN.md`](docs/PLASMA-IMPLEMENTATION-PLAN.md) and track progress in [GitHub Issues](https://github.com/sohopay/sohopay-protocol-plasma/issues).
+Implemented. The 5-act demo compiles and runs green (`DEMO COMPLETE`) at chain 9746.
+See [`docs/PLASMA-IMPLEMENTATION-PLAN.md`](docs/PLASMA-IMPLEMENTATION-PLAN.md) and track
+progress in [GitHub Issues](https://github.com/sohopay/sohopay-protocol-plasma/issues).
 
-## Quick start (when implemented)
+## Quick start
 
 ```bash
-cp .env.example .env
-# install Foundry deps (forge-std + OpenZeppelin) into lib/
-forge install foundry-rs/forge-std OpenZeppelin/openzeppelin-contracts OpenZeppelin/openzeppelin-contracts-upgradeable
-# vendor the protocol source + pin the commit
-./scripts/sync-from-evm.sh ../sohopay-protocol
-# fund the Plasma testnet wallet with XPL, then run the 5-act demo
-./scripts/tether-demo/run-plasma-demo.sh
+cp .env.usdt-demo.plasma.example .env.usdt-demo.plasma   # add 3 throwaway testnet keys
+# deps are pinned in foundry.lock (audited OZ commits) — do NOT install unpinned
+forge install                                            # or: git submodule update --init --recursive
+# run the self-contained 5-act demo (deploys a mock USDT; prints DEMO COMPLETE)
+ENV_FILE=.env.usdt-demo.plasma ./scripts/tether-demo/run-plasma-demo.sh
 ```
+
+For a persistent on-chain testnet deploy (real Plasmascan links), fund the deployer with
+XPL and run `ENV_FILE=.env.usdt-demo.plasma ./scripts/tether-demo/deploy-plasma-testnet.sh`.
 
 ## Docs
 

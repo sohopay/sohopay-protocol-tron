@@ -13,13 +13,13 @@ Run the full 5-act demo with **one command**. No Solidity knowledge required.
 2. **Clone + configure**
    ```bash
    git clone https://github.com/sohopay/sohopay-protocol-plasma && cd sohopay-protocol-plasma
-   cp .env.example .env
+   cp .env.usdt-demo.plasma.example .env.usdt-demo.plasma
    ```
 3. **Fill `.env`** with three testnet private keys (`DEPLOYER_PRIVATE_KEY`,
    `AGENT_PRIVATE_KEY`, `TRUSTED_SIGNER_PRIVATE_KEY`). Leave `USDC_ADDR` blank to
    use a mock USDT. Any throwaway keys work — these never touch real funds.
 4. **Fund the deployer with testnet XPL** (gas) from a Plasma faucet:
-   gas.zip · Chainlink · QuickNode (see [DEPLOY-PLASMA.md](DEPLOY-PLASMA.md)).
+   gas.zip · Chainlink · QuickNode (see [DEPLOY-PLASMA-TESTNET.md](DEPLOY-PLASMA-TESTNET.md)).
 
 ## Run the demo
 
@@ -46,9 +46,9 @@ DEMO COMPLETE
 ## Share the result
 
 ```bash
-./scripts/tether-demo/extract-link-pack.sh   # writes docs/tether-demo/LINK-PACK.md
+./scripts/tether-demo/extract-link-pack.sh   # writes docs/tether-demo/LINK-PACK-PLASMA.md
 ```
 
-Open the links in [LINK-PACK.md](LINK-PACK.md) on
+Open the links in [LINK-PACK-PLASMA.md](LINK-PACK-PLASMA.md) on
 [testnet.plasmascan.to](https://testnet.plasmascan.to) to show the live contracts and
 transactions. For the talk track, see [MEETING-GUIDE.md](MEETING-GUIDE.md).

@@ -101,9 +101,9 @@ in `src/SohoSettlement.sol`; asset is env-driven via `script/DeployConfig.sol`.
   off-chain EIP-712 digest at chain 9746, **before Act 3**. No override.
 
 ### Sub-issue #4 — Deploy + 5 acts (commit: `feat(#4): plasma deploy + 5-act demo`)
-5. **Mock asset** — `test/mocks/MockUSDT.sol` (6-dec ERC-20, mintable) for the
+5. **Mock asset** — `test/mocks/MockUSDTNonStandard.sol` (6-dec, no-bool-return, mintable) for the
    self-contained testnet demo; real token via `USDT_ADDR` env override.
-6. **Deploy** — `scripts/tether-demo/deploy-plasma.sh` wrapping
+6. **Deploy** — `scripts/tether-demo/deploy-plasma-testnet.sh` wrapping
    `forge script script/Deploy.s.sol --rpc-url plasma_testnet --broadcast --verify`;
    wire `USDT_ADDR` (or freshly-deployed mock); Tier-2 agent, Active merchant,
    fund vault + hot float.
@@ -122,9 +122,9 @@ in `src/SohoSettlement.sol`; asset is env-driven via `script/DeployConfig.sol`.
 9. **`scripts/tether-demo/extract-link-pack.sh`** — parse
    `broadcast/Deploy.s.sol/9746/run-latest.json` → emit Plasmascan links.
 10. **`docs/tether-demo/`**: `CEO-RUNBOOK.md` (one-command, no Solidity),
-    `DEPLOY-PLASMA.md` (faucet, XPL/USDT funding, gas/paymaster notes),
+    `DEPLOY-PLASMA-TESTNET.md` (faucet, XPL/USDT funding, gas/paymaster notes),
     `MEETING-GUIDE.md` (5-act narrative + Q&A),
-    `LINK-PACK.md` (USDT, Settlement proxy, Vault proxy, Act 3 tx, Act 5
+    `LINK-PACK-PLASMA.md` (USDT, Settlement proxy, Vault proxy, Act 3 tx, Act 5
     `emergencyRedeem` tx, `SYNCED_FROM` SHA).
     - **Acceptance:** CEO runs from runbook alone; LINK-PACK complete.
 
@@ -146,7 +146,7 @@ in `src/SohoSettlement.sol`; asset is env-driven via `script/DeployConfig.sol`.
 | Merchant receives USDT on settle | ✅ verified | Act 3 paid 50 USDT; EIP-712 sigs recover at 9746 |
 | Overpayment reverts on repay | ✅ verified | Act 4 partial ok, overpay reverts |
 | emergencyRedeem while paused | ✅ verified | Act 5 redeemed 2,506 USDT |
-| Persistent on-chain deploy + Plasmascan links | ⏳ operator | `deploy-plasma.sh` (two-leg) + funded XPL |
+| Persistent on-chain deploy + Plasmascan links | ⏳ operator | `deploy-plasma-testnet.sh` (two-leg) + funded XPL |
 | `SYNCED_FROM` pins commit | ✅ done | `f44ffc0` written by `sync-from-evm.sh` |
 
 **Verified locally** with Foundry 1.7.1 against a chain-9746 EVM. The only step that
@@ -166,7 +166,7 @@ Deps are pinned via `foundry.lock` + git submodules to the **audited** commits
 |------|------------|
 | `evm_version=cancun` opcodes unsupported on Plasma | verify; downshift to `shanghai`/`paris` |
 | Real testnet USDT0 address unknown | mock 6-dec ERC-20 default; `USDT_ADDR` override |
-| Gas model (XPL vs USDT paymaster) | document both in `DEPLOY-PLASMA.md` |
+| Gas model (XPL vs USDT paymaster) | document both in `DEPLOY-PLASMA-TESTNET.md` |
 | Upstream `script/DemoUSDT.s.sol` does not exist | 5-act driver authored from spec |
 | `docs/tether-demo/` missing upstream (#6) | create folder in cross-link PR |
 

@@ -6,11 +6,12 @@
 # This runs the 5 acts in-memory at chain id 9746 (the protocol's 48h-style timelock
 # means schedule+execute+settle cannot share one live broadcast — see DemoPlasma.s.sol
 # and Deploy.s.sol). For a persistent on-chain testnet deployment with Plasmascan links,
-# use deploy-plasma.sh (production two-leg schedule/execute).
+# use deploy-plasma-testnet.sh (production two-leg schedule/execute).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
-[[ -f .env ]] && set -a && . ./.env && set +a
+ENV_FILE="${ENV_FILE:-.env}"
+[[ -f "$ENV_FILE" ]] && set -a && . "./$ENV_FILE" && set +a
 
 : "${DEPLOYER_PRIVATE_KEY:?set DEPLOYER_PRIVATE_KEY}"
 : "${AGENT_PRIVATE_KEY:?set AGENT_PRIVATE_KEY}"
@@ -31,4 +32,4 @@ forge build
 echo ">> running 5-act demo at chain 9746"
 forge script script/DemoPlasma.s.sol:DemoPlasma --chain 9746 -vv
 
-echo ">> (optional) for on-chain deploy + LINK-PACK, run scripts/tether-demo/deploy-plasma.sh"
+echo ">> (optional) for on-chain deploy + LINK-PACK, run scripts/tether-demo/deploy-plasma-testnet.sh"

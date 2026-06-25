@@ -45,7 +45,7 @@ in one transaction stream. Demo only.
 
 ### B. Production-style deploy (timelocked)
 ```bash
-./scripts/tether-demo/deploy-plasma.sh
+./scripts/tether-demo/deploy-plasma-testnet.sh
 ```
 Uses the vendored `script/Deploy.s.sol`: CREATE2 deterministic addresses, 48h timelock,
 deployer renounces all roles to the Treasury Safe. Set role addresses + `USDC_ADDR` in
