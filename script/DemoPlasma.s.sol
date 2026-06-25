@@ -12,7 +12,7 @@ import {SohoSettlement} from "../src/SohoSettlement.sol";
 import {SohoVault} from "../src/SohoVault.sol";
 import {SohoFirstLossReserve} from "../src/SohoFirstLossReserve.sol";
 import {Types} from "../src/libraries/Types.sol";
-import {MockUSDT} from "../../test/mocks/MockUSDT.sol";
+import {MockUSDT} from "../test/mocks/MockUSDT.sol";
 
 /// @title  DemoPlasma — SOHOPay 5-act USDT demo on Plasma testnet (chain 9746)
 /// @notice Self-contained demo: deploys the audited stack (vendored from sohopay-protocol,
@@ -24,10 +24,10 @@ import {MockUSDT} from "../../test/mocks/MockUSDT.sol";
 ///         controller admin (no renounce) so the script can drive registrations, and uses a
 ///         zero timelock. Never use this wiring for real funds.
 ///
-/// @dev    ⚠️ NOT compile-verified in the authoring environment (no Foundry). Run
-///         `forge build` then `scripts/tether-demo/run-plasma-demo.sh` to validate; the
-///         act bodies are written against the frozen ABI in src/ (see
-///         docs/PLASMA-IMPLEMENTATION-PLAN.md §1).
+/// @dev    Verified: compiles (forge build) and all 5 acts run green to `DEMO COMPLETE`
+///         in-memory at chain id 9746 (Settlement pays the merchant 50 USDT, overpayment
+///         reverts, emergencyRedeem works while paused). Reproduce:
+///         `scripts/tether-demo/run-plasma-demo.sh`.
 ///
 /// Env: DEPLOYER_PRIVATE_KEY, AGENT_PRIVATE_KEY, TRUSTED_SIGNER_PRIVATE_KEY,
 ///      USDC_ADDR (optional; blank → deploy MockUSDT), EXPECTED_CHAIN_ID (9746).
@@ -43,6 +43,7 @@ contract DemoPlasma is Script {
     uint96 constant PER_TX = 100e6; // tier-2 per-tx cap (Stage-0)
     uint256 constant PAY = 50e6; // Act 3 settle amount
     uint256 constant FEE = 1e6;
+    uint256 constant DEMO_DELAY = 1; // 1s timelock; warped past in-run (anvil/simulation)
 
     SohoTreasuryController controller;
     SohoSettlement settlement;
@@ -90,11 +91,14 @@ contract DemoPlasma is Script {
         }
         usdt = IERC20(assetAddr);
 
-        // controller: zero timelock, deployer as bootstrap admin + proposer + executor.
+        // controller: 1s timelock (markDefaultDelay must be strictly below minDelay, and OZ
+        // forbids scheduling below minDelay), deployer as bootstrap admin + proposer + executor.
+        // Each batch is scheduled then warped past + executed in this same run (anvil/simulation
+        // pattern, mirroring Deploy.s.sol "all" mode — not broadcastable live across the warp).
         address[] memory pe = new address[](1);
         pe[0] = deployer;
         controller = new SohoTreasuryController(
-            0, pe, pe, deployer, usdt, uint64(0), uint96(2_000e6)
+            DEMO_DELAY, pe, pe, deployer, usdt, uint64(0), uint96(2_000e6)
         );
 
         reserve = SohoFirstLossReserve(
@@ -148,6 +152,11 @@ contract DemoPlasma is Script {
             AGENT_ID, BUSINESS_ID, agentSigner, 2, PER_TX, PER_TX,
             uint64(block.timestamp + 365 days), keccak256("DEMO_MANDATE")
         );
+
+        // Fund the settlement hot float (facilitator balance it pays merchants from, within the
+        // hotFloatCeiling). Demo: mint to the proxy; production refills via the vault credit hook.
+        _fund(address(settlement), 1_000e6);
+        console2.log("hot float funded:", uint256(1_000e6));
 
         // EIP-712 sanity (residual of Tron #3): domain binds to this proxy at chain 9746.
         (, , , uint256 cid, address vc, , ) = settlement.eip712Domain();
@@ -253,7 +262,8 @@ contract DemoPlasma is Script {
         // reserve wiring
         t[13] = address(reserve); p[13] = abi.encodeCall(SohoFirstLossReserve.setVault, (vlt));
 
-        controller.scheduleBatch(t, v, p, bytes32(0), bytes32("demo"), 0);
+        controller.scheduleBatch(t, v, p, bytes32(0), bytes32("demo"), DEMO_DELAY);
+        vm.warp(block.timestamp + DEMO_DELAY + 1);
         controller.executeBatch(t, v, p, bytes32(0), bytes32("demo"));
     }
 
@@ -265,7 +275,8 @@ contract DemoPlasma is Script {
         t[0] = target;
         p[0] = payload;
         bytes32 salt = keccak256(abi.encodePacked("demo", target, payload));
-        controller.scheduleBatch(t, v, p, bytes32(0), salt, 0);
+        controller.scheduleBatch(t, v, p, bytes32(0), salt, DEMO_DELAY);
+        vm.warp(block.timestamp + DEMO_DELAY + 1);
         controller.executeBatch(t, v, p, bytes32(0), salt);
     }
 
