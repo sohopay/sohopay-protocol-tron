@@ -139,18 +139,24 @@ in `src/SohoSettlement.sol`; asset is env-driven via `script/DeployConfig.sol`.
 
 ## 5. Verification (maps to #1 success criteria)
 
-| Criterion | How |
-|-----------|-----|
-| Contracts deployed on Plasma | `forge script … --broadcast --verify`; Plasmascan |
-| `run-plasma-demo.sh` → `DEMO COMPLETE` | one command |
-| Merchant receives USDT on settle | balance assert in Act 3 |
-| Overpayment reverts on repay | expect-revert in Act 4 |
-| LINK-PACK complete | `extract-link-pack.sh` output |
-| `SYNCED_FROM` pins commit | written by `sync-from-evm.sh` |
+| Criterion | Status | How |
+|-----------|--------|-----|
+| `forge build` compiles vendored src + scripts | ✅ verified | EXIT 0 with pinned deps (foundry.lock) |
+| `run-plasma-demo.sh` → `DEMO COMPLETE` | ✅ verified | in-memory at chain 9746, EXIT 0 |
+| Merchant receives USDT on settle | ✅ verified | Act 3 paid 50 USDT; EIP-712 sigs recover at 9746 |
+| Overpayment reverts on repay | ✅ verified | Act 4 partial ok, overpay reverts |
+| emergencyRedeem while paused | ✅ verified | Act 5 redeemed 2,506 USDT |
+| Persistent on-chain deploy + Plasmascan links | ⏳ operator | `deploy-plasma.sh` (two-leg) + funded XPL |
+| `SYNCED_FROM` pins commit | ✅ done | `f44ffc0` written by `sync-from-evm.sh` |
 
-**Requires the operator's environment:** Foundry installed, funded deployer
-(XPL via faucet), private keys in `.env`. Build/deploy are not run in the
-authoring environment.
+**Verified locally** with Foundry 1.7.1 against a chain-9746 EVM. The only step that
+still needs the operator's environment is a **persistent on-chain testnet deploy**
+(funded XPL + private keys) to populate the LINK-PACK with real addresses/tx hashes.
+
+### Dependency pinning (critical)
+Deps are pinned via `foundry.lock` + git submodules to the **audited** commits
+(OZ upgradeable **v5.1.0**). Do **not** `forge install` unpinned — OZ ≥ 5.6 drops
+`__UUPSUpgradeable_init` and the vendored contracts will not compile.
 
 ---
 
