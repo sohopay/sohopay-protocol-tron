@@ -1,0 +1,33 @@
+[profile.default]
+src = "src"                     # vendored from sohopay-protocol via scripts/sync-from-evm.sh
+out = "out"
+libs = ["lib"]
+test = "test"
+script = "script"
+solc_version = "0.8.24"
+via_ir = true                   # 19-step settle is local-heavy; IR pipeline avoids stack-too-deep
+optimizer = true
+optimizer_runs = 10_000
+# Plasma is EVM-equivalent. `cancun` matches the audited Base bytecode of the source repo,
+# so the vendored logic is byte-identical. If a Plasma deploy rejects cancun opcodes,
+# downshift to "shanghai" (see docs/PLASMA-IMPLEMENTATION-PLAN.md §6 risks).
+evm_version = "cancun"
+fs_permissions = [{ access = "read", path = "./" }]
+
+[profile.default.fuzz]
+runs = 1024
+
+[profile.default.invariant]
+runs = 256
+depth = 64
+fail_on_revert = false
+
+[fmt]
+line_length = 110
+
+[rpc_endpoints]
+plasma_testnet = "${PLASMA_RPC}"
+
+[etherscan]
+# Plasmascan (Blockscout-compatible) verification for the testnet.
+plasma_testnet = { key = "${PLASMASCAN_API_KEY}", chain = 9746, url = "https://testnet.plasmascan.to/api" }
