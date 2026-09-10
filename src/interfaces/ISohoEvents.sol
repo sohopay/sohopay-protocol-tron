@@ -19,6 +19,18 @@ interface ISohoEvents {
         uint256 feeAmount,
         bytes32 orderRef
     );
+    /// @dev Additive A2A settlement. Distinct from SettlementExecuted so indexers never
+    ///      treat an agent payee as a merchant. Experimental: not in the prior v1 audit.
+    event AgentToAgentSettled(
+        bytes32 indexed paymentId,
+        bytes32 indexed payerAgentId,
+        bytes32 indexed payeeAgentId,
+        address asset,
+        uint256 amount,
+        uint256 feeAmount,
+        bytes32 orderRef
+    );
+    event AgentReceiveSet(bytes32 indexed agentId, address oldReceive, address newReceive);
     event PaymentRevoked(bytes32 indexed paymentId);
     event RepaymentReceived(bytes32 indexed agentId, uint256 amount, address payer);
     event OwnerRegistered(bytes32 indexed ownerId);

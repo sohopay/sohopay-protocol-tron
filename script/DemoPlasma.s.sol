@@ -61,11 +61,20 @@ contract DemoPlasma is Script {
     uint256 agentPk;
 
     function run() external {
-        uint256 pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        // Local defaults are the well-known Anvil/Foundry throwaway keys.
+        uint256 pk = vm.envOr(
+            "DEPLOYER_PRIVATE_KEY",
+            uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80)
+        );
         deployer = vm.addr(pk);
-        agentPk = vm.envUint("AGENT_PRIVATE_KEY");
+        agentPk = vm.envOr(
+            "AGENT_PRIVATE_KEY", uint256(0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d)
+        );
         agentSigner = vm.addr(agentPk);
-        trustedPk = vm.envUint("TRUSTED_SIGNER_PRIVATE_KEY");
+        trustedPk = vm.envOr(
+            "TRUSTED_SIGNER_PRIVATE_KEY",
+            uint256(0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a)
+        );
         trustedSigner = vm.addr(trustedPk);
         require(block.chainid == vm.envOr("EXPECTED_CHAIN_ID", uint256(9746)), "wrong chain");
 

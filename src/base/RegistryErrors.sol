@@ -13,3 +13,7 @@ pragma solidity 0.8.24;
 error AlreadyRegistered(bytes32 id);
 error SignerInUse(address signer);
 error InvalidStatusTransition(uint8 fromStatus, uint8 toStatus);
+// Additive A2A (INV-A2A). Kept out of frozen Types.sol. Experimental: not in the prior audit.
+error PayeeAgentNotActive(bytes32 agentId);
+error PayeeReceiveUnset(bytes32 agentId);
+error SelfPayment(bytes32 agentId);

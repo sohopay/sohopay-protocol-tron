@@ -9,5 +9,7 @@ COMMIT="$(git -C "$EVM_REPO" rev-parse HEAD)"
 mkdir -p "$ROOT/src" "$ROOT/test/mocks"
 rsync -a --delete "$EVM_REPO/src/" "$ROOT/src/"
 rsync -a "$EVM_REPO/test/mocks/MockUSDTNonStandard.sol" "$ROOT/test/mocks/" 2>/dev/null || true
+rsync -a "$EVM_REPO/test/mocks/MockERC20.sol" "$ROOT/test/mocks/" 2>/dev/null || true
+rsync -a "$EVM_REPO/test/mocks/MockUSDC.sol" "$ROOT/test/mocks/" 2>/dev/null || true
 printf '# Commit: %s\n' "$COMMIT" > "$ROOT/SYNCED_FROM"
 echo "Synced from $COMMIT"

@@ -6,7 +6,11 @@ broadcast/**/dry-run/
 .env
 .env.*
 !.env.usdt-demo.plasma.example
+!.env.a2a.base-sepolia.example
 *.log
 .DS_Store
+.sohopay/
+.sohopay-test*
+scripts/a2a/.local-identity.json
 coverage/
 lcov.info

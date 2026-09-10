@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# sohopay — welcome shell for the experimental Base Sepolia A2A demo.
+set -euo pipefail
+
+# Follow this file through ~/.local/bin/sohopay → repo/bin/sohopay.
+src="${BASH_SOURCE[0]}"
+while [[ -L "$src" ]]; do
+  dir="$(cd "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ "$src" != /* ]] && src="$dir/$src"
+done
+ROOT="$(cd "$(dirname "$src")/.." && pwd)"
+TERM_SH="$ROOT/scripts/a2a/sohopay-terminal.sh"
+
+if [[ ! -x "$TERM_SH" ]]; then
+  echo "sohopay: missing $TERM_SH" >&2
+  echo "Re-run: $ROOT/scripts/a2a/install-sohopay-cli.sh" >&2
+  exit 1
+fi
+
+exec "$TERM_SH" "$@"

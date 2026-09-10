@@ -77,6 +77,19 @@ library Types {
         bool cancelled;
     }
 
+    /// @dev Additive A2A intent (INV-A2A). Append-only — does not alter PaymentIntent
+    ///      field order or typehash. Experimental: not covered by the prior v1 audit.
+    struct AgentPaymentIntent {
+        bytes32 payerAgentId;
+        bytes32 payeeAgentId;
+        address asset;
+        uint256 amount;
+        uint256 feeAmount;
+        bytes32 orderRef;
+        uint256 nonce;
+        uint256 deadline;
+    }
+
     // ── Roles (OZ AccessControl; admin = TreasuryController) ──
     bytes32 internal constant EXECUTOR_ROLE = keccak256("EXECUTOR_ROLE");
     bytes32 internal constant CREDIT_ADMIN_ROLE = keccak256("CREDIT_ADMIN_ROLE");

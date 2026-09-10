@@ -79,6 +79,37 @@ abstract contract CapManager {
     /// @dev Settlement step 16 — roll each window if elapsed, then add `amount`. Safe to add
     ///      into uint96 because _checkCaps proved each post-roll sum <= cap <= uint96 max.
     ///      MUST run in the effects phase (after paymentId consumption, before transfers).
+    /// @dev A2A settlement — payer + global daily windows only. No merchant storage.
+    ///      CHECK ONLY (no state change). Same uint256-sum overflow hygiene as _checkCaps.
+    function _checkPayerCaps(Types.Agent storage payer, uint96 amount) internal view {
+        if (amount > payer.perTxCap) revert Types.PerTxCapExceeded(amount, payer.perTxCap);
+        if (uint256(_effectiveSpent(payer.dailySpent, payer.windowStart)) + amount > payer.dailyCap) {
+            revert Types.DailyCapExceeded(SCOPE_AGENT);
+        }
+        if (uint256(_effectiveSpent(_globalDailySpent, _globalWindowStart)) + amount > _globalDailyCap) {
+            revert Types.DailyCapExceeded(SCOPE_GLOBAL);
+        }
+    }
+
+    /// @dev A2A settlement — roll payer + global windows, then add `amount`. Does not
+    ///      touch merchant daily windows. Safe to add into uint96 because _checkPayerCaps
+    ///      proved each post-roll sum <= cap <= uint96 max.
+    function _accruePayerCaps(Types.Agent storage payer, uint96 amount) internal {
+        uint64 nowTs = uint64(block.timestamp);
+        if (block.timestamp >= uint256(payer.windowStart) + WINDOW) {
+            payer.windowStart = nowTs;
+            payer.dailySpent = amount;
+        } else {
+            payer.dailySpent += amount;
+        }
+        if (block.timestamp >= uint256(_globalWindowStart) + WINDOW) {
+            _globalWindowStart = nowTs;
+            _globalDailySpent = amount;
+        } else {
+            _globalDailySpent += amount;
+        }
+    }
+
     function _accrueCaps(Types.Agent storage agent, Types.Merchant storage merchant, uint96 amount) internal {
         uint64 nowTs = uint64(block.timestamp);
         if (block.timestamp >= uint256(agent.windowStart) + WINDOW) {

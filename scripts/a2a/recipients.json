@@ -1,0 +1,26 @@
+{
+  "bob": {
+    "label": "Bob Agent",
+    "handle": "bob",
+    "alias": ["bob", "bob's agent", "bobs agent", "@bob"],
+    "agentIdPreimage": "BOB_AGENT",
+    "role": "payer",
+    "receiveAddress": ""
+  },
+  "phil": {
+    "label": "Phil Agent",
+    "handle": "phil",
+    "alias": ["phil", "phil's agent", "phils agent", "@phil"],
+    "agentIdPreimage": "PHIL_AGENT",
+    "role": "payee",
+    "receiveAddress": "0x178905fE008BfD6B743406fcFDA01D98F68CF790"
+  },
+  "acme": {
+    "label": "Acme Coffee",
+    "handle": "acme",
+    "alias": ["acme", "acme coffee", "coffee", "@acme"],
+    "merchantIdPreimage": "ACME_MERCHANT",
+    "role": "merchant",
+    "payout": "0xA11CE000000000000000000000000000000000CE"
+  }
+}

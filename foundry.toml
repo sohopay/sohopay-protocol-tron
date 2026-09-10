@@ -27,7 +27,9 @@ line_length = 110
 
 [rpc_endpoints]
 plasma_testnet = "${PLASMA_RPC}"
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
 
 [etherscan]
 # Plasmascan (Blockscout-compatible) verification for the testnet.
 plasma_testnet = { key = "${PLASMASCAN_API_KEY}", chain = 9746, url = "https://testnet.plasmascan.to/api" }
+base_sepolia = { key = "${BASESCAN_API_KEY}", chain = 84532 }

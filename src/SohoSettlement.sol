@@ -20,6 +20,7 @@ import {SohoEIP712} from "./libraries/SohoEIP712.sol";
 import {IdentityRegistry} from "./base/IdentityRegistry.sol";
 import {MerchantRegistry} from "./base/MerchantRegistry.sol";
 import {CapManager} from "./base/CapManager.sol";
+import {PayeeAgentNotActive, PayeeReceiveUnset, SelfPayment} from "./base/RegistryErrors.sol";
 import {ISohoVault} from "./interfaces/ISohoVault.sol";
 import {ISohoSettlement} from "./interfaces/ISohoSettlement.sol";
 
@@ -54,6 +55,9 @@ contract SohoSettlement is
     address public feeRecipient;
     address public vault;
     address public treasuryController; // upgrade authority (D14)
+    /// @dev Additive A2A receive wallets. Appended after existing Settlement slots;
+    ///      consumes 1 slot from `__gap` (40 → 39). Never defaults to `agent.signer`.
+    mapping(bytes32 => address) internal _agentReceive;
 
     /// @dev DECISION(gate-1): direct-repay overpayment REVERTS (O10, recommended default).
     error Overpayment(bytes32 agentId, uint256 amount, uint256 outstandingDebt);
@@ -191,6 +195,131 @@ contract SohoSettlement is
             intent.feeAmount,
             intent.orderRef
         );
+    }
+
+    /// @notice Additive A2A settlement (INV-A2A). Parallel to settleWithAttestation.
+    ///         Pays `_agentReceive[payee]` of an Active registered agent. Does not read
+    ///         or write MerchantRegistry. Experimental — not covered by the prior v1 audit.
+    /// @dev    Check order mirrors the merchant 19-step CEI (sigs + caps + hot-float before
+    ///         effects; transfers after consume). DO NOT weaken replay or signature gates.
+    function settleAgentToAgent(
+        Types.AgentPaymentIntent calldata intent,
+        bytes calldata intentSig,
+        Types.CreditAttestation calldata att,
+        bytes calldata attSig,
+        address attestationSigner
+    ) external whenNotPaused onlyRole(Types.EXECUTOR_ROLE) returns (bytes32 paymentId) {
+        // 1. whenNotPaused; onlyRole(EXECUTOR_ROLE)
+        // 2. paymentId = hashStruct(AgentPaymentIntent) — domain-separated from merchant intents
+        paymentId = SohoEIP712.hashAgentIntent(intent);
+        // 3. not already settled
+        if (usedPayments[paymentId]) revert Types.PaymentAlreadySettled(paymentId);
+        // 4. not revoked
+        if (revokedPayments[paymentId]) revert Types.PaymentRevokedError(paymentId);
+        // 5. intent not expired
+        if (block.timestamp > intent.deadline) revert Types.IntentExpired();
+        // 6. attestation not expired
+        if (block.timestamp > att.deadline) revert Types.AttestationExpired();
+        // 7. binding: att.paymentId==paymentId binds payee (inside the A2A hash); att.* == payer fields
+        if (
+            att.paymentId != paymentId || att.agentId != intent.payerAgentId || att.asset != intent.asset
+                || att.amount != intent.amount || att.feeAmount != intent.feeAmount
+        ) revert Types.AttestationIntentMismatch();
+        // 8. payer Active && !Revoked; tier-2 (launch): business + owner Active, mandate valid
+        Types.Agent storage payer = _agents[intent.payerAgentId];
+        if (payer.status == Types.Status.Revoked) revert Types.AgentRevoked(intent.payerAgentId);
+        if (payer.status != Types.Status.Active) revert Types.AgentNotActive(intent.payerAgentId);
+        if (payer.tier == 2) {
+            Types.Business storage payerBiz = _businesses[payer.businessId];
+            if (payerBiz.status != Types.Status.Active) revert Types.BusinessNotActive(payer.businessId);
+            if (_owners[payerBiz.ownerId].status != Types.Status.Active) {
+                revert Types.OwnerNotActive(payerBiz.ownerId);
+            }
+            if (block.timestamp > payer.mandateExpiry) revert Types.MandateExpired(intent.payerAgentId);
+        }
+        // 9. payee is a registered Active agent (not a merchant). Mandate is payer-only.
+        //    Tier-2: require Active business + owner so receive is gated by the identity chain.
+        if (intent.payerAgentId == intent.payeeAgentId) revert SelfPayment(intent.payerAgentId);
+        Types.Agent storage payee = _agents[intent.payeeAgentId];
+        if (payee.status == Types.Status.Revoked) revert Types.AgentRevoked(intent.payeeAgentId);
+        if (payee.status != Types.Status.Active) revert PayeeAgentNotActive(intent.payeeAgentId);
+        if (payee.tier == 2) {
+            Types.Business storage payeeBiz = _businesses[payee.businessId];
+            if (payeeBiz.status != Types.Status.Active) revert Types.BusinessNotActive(payee.businessId);
+            if (_owners[payeeBiz.ownerId].status != Types.Status.Active) {
+                revert Types.OwnerNotActive(payeeBiz.ownerId);
+            }
+        }
+        // 10. receive address configured — never fall back to payee.signer
+        address receiveAddr = _agentReceive[intent.payeeAgentId];
+        if (receiveAddr == address(0)) revert PayeeReceiveUnset(intent.payeeAgentId);
+        // 11. supported asset
+        if (!isSupportedAsset[intent.asset]) revert Types.UnsupportedAsset(intent.asset);
+        // 12. intent sig == payer.signer (ECDSA, never ecrecover)
+        {
+            address recovered = ECDSA.recover(_hashTypedDataV4(paymentId), intentSig);
+            if (recovered != payer.signer) {
+                revert Types.IntentSignerMismatch(intent.payerAgentId, payer.signer, recovered);
+            }
+        }
+        // 13. attestation sig trusted (SignatureChecker, EIP-1271 ok); explicit signer checked
+        {
+            if (!trustedSigners[attestationSigner]) revert Types.UntrustedAttestationSigner();
+            bytes32 attDigest = _hashTypedDataV4(SohoEIP712.hashAttestation(att));
+            if (!SignatureChecker.isValidSignatureNow(attestationSigner, attDigest, attSig)) {
+                revert Types.InvalidSignature();
+            }
+        }
+        // 14. caps (CHECK ONLY): per-tx + payer/global daily on amount; cumulative on amount+fee
+        if (intent.amount > type(uint96).max) revert Types.PerTxCapExceeded(intent.amount, payer.perTxCap);
+        if (intent.feeAmount > type(uint96).max) revert Types.GlobalCumulativeCapExceeded();
+        uint256 total = intent.amount + intent.feeAmount;
+        if (total > type(uint96).max) revert Types.GlobalCumulativeCapExceeded();
+        uint96 amount96 = uint96(intent.amount);
+        uint96 total96 = uint96(total);
+        _checkPayerCaps(payer, amount96);
+        _checkGlobalOutstanding(total96);
+        // 15. hot-float balance >= amount + fee
+        if (IERC20(usdc).balanceOf(address(this)) < intent.amount + intent.feeAmount) {
+            revert Types.InsufficientFacilitatorBalance();
+        }
+
+        // --- EFFECTS (before interactions — CEI) ---
+        // 16. consume the replay key
+        usedPayments[paymentId] = true;
+        // 17. accrue payer + global daily; no merchant window
+        _accruePayerCaps(payer, amount96);
+        _accrueOutstanding(total96);
+        payer.outstandingDebt += total96;
+
+        // --- INTERACTIONS ---
+        // 18. payout to the configured agent receive address (not signer, not merchant.payout)
+        IERC20(usdc).safeTransfer(receiveAddr, intent.amount);
+        // 19. protocol fee
+        IERC20(usdc).safeTransfer(feeRecipient, intent.feeAmount);
+        // 20. emit A2A-specific event (do not overload SettlementExecuted)
+        emit AgentToAgentSettled(
+            paymentId,
+            intent.payerAgentId,
+            intent.payeeAgentId,
+            intent.asset,
+            intent.amount,
+            intent.feeAmount,
+            intent.orderRef
+        );
+    }
+
+    /// @notice TREASURY sets the A2A receive wallet. Zero address and unknown agents revert.
+    function setAgentReceive(bytes32 agentId, address receive_) external onlyRole(Types.TREASURY_ROLE) {
+        if (receive_ == address(0)) revert Types.ZeroAddress();
+        if (_agents[agentId].status == Types.Status.None) revert Types.AgentNotActive(agentId);
+        address old = _agentReceive[agentId];
+        _agentReceive[agentId] = receive_;
+        emit AgentReceiveSet(agentId, old, receive_);
+    }
+
+    function agentReceive(bytes32 agentId) external view returns (address) {
+        return _agentReceive[agentId];
     }
 
     function revokePayment(bytes32 paymentId) external onlyRole(Types.CREDIT_ADMIN_ROLE) {
@@ -364,8 +493,16 @@ contract SohoSettlement is
         return SohoEIP712.hashIntent(i);
     }
 
+    function computeAgentPaymentId(Types.AgentPaymentIntent calldata i) external pure returns (bytes32) {
+        return SohoEIP712.hashAgentIntent(i);
+    }
+
     function intentDigest(Types.PaymentIntent calldata i) external view returns (bytes32) {
         return _hashTypedDataV4(SohoEIP712.hashIntent(i));
+    }
+
+    function agentIntentDigest(Types.AgentPaymentIntent calldata i) external view returns (bytes32) {
+        return _hashTypedDataV4(SohoEIP712.hashAgentIntent(i));
     }
 
     function attestationDigest(Types.CreditAttestation calldata a) external view returns (bytes32) {
@@ -429,5 +566,6 @@ contract SohoSettlement is
     }
 
     /// @dev Upgrade-safety storage gap (D14). Append above; never reorder.
-    uint256[40] private __gap;
+    ///      Slot consumed: `_agentReceive` (1 mapping). Before: 40. After: 39.
+    uint256[39] private __gap;
 }

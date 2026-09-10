@@ -19,6 +19,19 @@ interface ISohoSettlement is ISohoEvents {
         address attestationSigner // DECISION(gate-1): attestation signer passed EXPLICITLY (EIP-1271-clean)
     ) external returns (bytes32 paymentId);
 
+    /// @notice Additive A2A settlement (INV-A2A). Pays `_agentReceive[payeeAgentId]` of an
+    ///         Active registered agent. Does not touch MerchantRegistry. Experimental.
+    function settleAgentToAgent(
+        Types.AgentPaymentIntent calldata intent,
+        bytes calldata intentSig,
+        Types.CreditAttestation calldata att,
+        bytes calldata attSig,
+        address attestationSigner
+    ) external returns (bytes32 paymentId);
+
+    function setAgentReceive(bytes32 agentId, address receive_) external; // TREASURY_ROLE
+    function agentReceive(bytes32 agentId) external view returns (address);
+
     function revokePayment(bytes32 paymentId) external; // CREDIT_ADMIN_ROLE
 
     // ===== REPAYMENT (borrower-initiated only — D8; permissionless payer, USDC) =====
@@ -65,7 +78,9 @@ interface ISohoSettlement is ISohoEvents {
 
     // ===== VIEWS =====
     function computePaymentId(Types.PaymentIntent calldata intent) external view returns (bytes32);
+    function computeAgentPaymentId(Types.AgentPaymentIntent calldata intent) external view returns (bytes32);
     function intentDigest(Types.PaymentIntent calldata intent) external view returns (bytes32);
+    function agentIntentDigest(Types.AgentPaymentIntent calldata intent) external view returns (bytes32);
     function attestationDigest(Types.CreditAttestation calldata att) external view returns (bytes32);
     function isSettled(bytes32 paymentId) external view returns (bool);
     function isRevoked(bytes32 paymentId) external view returns (bool);

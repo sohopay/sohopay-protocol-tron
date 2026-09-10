@@ -38,6 +38,31 @@ ENV_FILE=.env.usdt-demo.plasma ./scripts/tether-demo/run-plasma-demo.sh
 For a persistent on-chain testnet deploy (real Plasmascan links), fund the deployer with
 XPL and run `ENV_FILE=.env.usdt-demo.plasma ./scripts/tether-demo/deploy-plasma-testnet.sh`.
 
+## Agent-to-Agent (experimental, this branch)
+
+True A2A (`settleAgentToAgent`) is an **additive** protocol extension vendored from
+`sohopay-protocol` @ `214dd0a`. It is **not** covered by the prior v1 audit.
+Phil is a registered agent with a TREASURY-set receive address — not a merchant.
+
+Type `sohopay` to onboard (name + phone → unique `@handle` + $20 credit), then pay in English.
+
+```bash
+./scripts/a2a/install-sohopay-cli.sh
+sohopay
+# name, phone, demo SMS code, accept @handle
+# > pay @phil 20
+# > Pay Phil's agent $20
+# > pay 6 usdc to @acme
+```
+
+Protocol fixture (no REPL):
+
+```bash
+./scripts/a2a/run-base-a2a-demo.sh
+```
+
+See [`docs/a2a/`](docs/a2a/) and [`A2A-DEMO-RESULTS.md`](A2A-DEMO-RESULTS.md).
+
 ## Docs
 
 - [`docs/PLASMA-IMPLEMENTATION-PLAN.md`](docs/PLASMA-IMPLEMENTATION-PLAN.md) — full implementation plan
