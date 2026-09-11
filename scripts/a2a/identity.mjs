@@ -136,11 +136,59 @@ export function maskPhone(phone) {
   return `••••${d.slice(-4)}`;
 }
 
-export function claimIdentity({ name, phone, handle }) {
+export function parseRepayMethod(raw) {
+  const n = String(raw || "")
+    .trim()
+    .toLowerCase();
+  if (n === "a" || n === "1" || n === "wallet" || n === "address") return "wallet";
+  if (n === "b" || n === "2" || n === "card" || n === "bank" || n === "bank card") return "card";
+  throw new Error("choose A (wallet) or B (bank card)");
+}
+
+export function normalizeWallet(raw) {
+  const a = String(raw || "").trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(a)) {
+    throw new Error("wallet must be a 0x address (42 chars). Example: 0xDe20913Abf62FE97838AF397a4f4F2BD665E94f9");
+  }
+  return a;
+}
+
+export function normalizeCardFields({ number, cvc, exp }) {
+  const digits = String(number || "").replace(/\s|-/g, "");
+  if (!/^\d{13,19}$/.test(digits)) {
+    throw new Error("card number must be 13–19 digits. Example: 4242424242424242");
+  }
+  const cvcDigits = String(cvc || "").replace(/\D/g, "");
+  if (!/^\d{3,4}$/.test(cvcDigits)) {
+    throw new Error("CVC must be 3 or 4 digits. Example: 123");
+  }
+  const expRaw = String(exp || "").trim();
+  const m = expRaw.match(/^(\d{1,2})\s*\/\s*(\d{2})$/);
+  if (!m) throw new Error("expiration must be MM/YY. Example: 12/28");
+  const month = Number(m[1]);
+  if (month < 1 || month > 12) throw new Error("expiration month must be 01–12. Example: 12/28");
+  const expNorm = `${String(month).padStart(2, "0")}/${m[2]}`;
+  return {
+    repayMethod: "card",
+    repayCardLast4: digits.slice(-4),
+    repayCardExp: expNorm,
+    repayLabel: `card ••••${digits.slice(-4)} exp ${expNorm}`,
+  };
+}
+
+export function claimIdentity({ name, phone, handle, repayMethod, repayWallet, cardNumber, cvc, exp }) {
   const trimmed = String(name || "").trim();
   if (trimmed.length < 2) throw new Error("name is required");
   const phoneDigits = normalizePhone(phone);
   const h = assertHandleAvailable(handle || suggestHandle(trimmed));
+  const method = parseRepayMethod(repayMethod || "wallet");
+  let repay = { repayMethod: method, repayLabel: "" };
+  if (method === "wallet") {
+    const addr = normalizeWallet(repayWallet);
+    repay = { repayMethod: "wallet", repayWallet: addr, repayLabel: `wallet ${addr}` };
+  } else {
+    repay = normalizeCardFields({ number: cardNumber, cvc, exp });
+  }
   const user = {
     name: trimmed,
     phone: phoneDigits,
@@ -152,6 +200,7 @@ export function claimIdentity({ name, phone, handle }) {
     perTxCap: PER_TX_CAP,
     outstanding: 0,
     createdAt: new Date().toISOString(),
+    ...repay,
   };
   return saveUser(user);
 }
@@ -221,7 +270,12 @@ export function resolveRecipient(raw) {
     const handles = hits.map(([id, rec]) => `@${rec.handle || id}`).join(", ");
     throw new Error(`ambiguous name "${text}". Pay a unique handle: ${handles}`);
   }
-  throw new Error(`unknown recipient: ${text}. Try @phil or @acme`);
+  const known = Object.entries(directoryEntries())
+    .map(([id, rec]) => `@${rec.handle || id}`)
+    .join(", ");
+  throw new Error(
+    `unknown handle "${text}". This testnet demo settles on-chain to @phil only. Known: ${known || "@phil"}`
+  );
 }
 
 function packRecipient(id, rec, matchedBy) {
@@ -311,6 +365,15 @@ function main() {
         break;
       case "phone":
         console.log(normalizePhone(arg));
+        break;
+      case "repay-method":
+        console.log(parseRepayMethod(arg));
+        break;
+      case "wallet":
+        console.log(normalizeWallet(arg));
+        break;
+      case "card":
+        console.log(JSON.stringify(normalizeCardFields(JSON.parse(arg || "{}"))));
         break;
       case "suggest":
         console.log(suggestHandle(arg));

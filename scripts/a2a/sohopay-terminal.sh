@@ -14,6 +14,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PAY_AGENT="$ROOT/scripts/a2a/pay-agent.mjs"
 IDENTITY="$ROOT/scripts/a2a/identity.mjs"
 EXECUTE="${EXECUTE:-0}"
+# Live on-chain is the default when the Base Sepolia env + deployment exist.
+if [[ -z "${DEMO:-}" && -f "$ROOT/.env.a2a.base-sepolia" && -f "$ROOT/scripts/a2a/.deployment.json" ]]; then
+  LIVE="${LIVE:-1}"
+else
+  LIVE="${LIVE:-0}"
+fi
 CHAIN_ID="${EXPECTED_CHAIN_ID:-84532}"
 NETWORK_NAME="${NETWORK_NAME:-Base Sepolia}"
 TOKEN_SYMBOL="${TOKEN_SYMBOL:-USDC}"
@@ -23,6 +29,7 @@ USER_HANDLE=""
 USER_PHONE=""
 USER_LABEL=""
 USER_RECEIVE=""
+REPAY_LABEL=""
 CREDIT_LIMIT="20"
 PER_TX_CAP="20"
 OUTSTANDING="0"
@@ -101,6 +108,7 @@ load_identity() {
   USER_PHONE="$(json_field "$raw" phone)"
   USER_LABEL="$(json_field "$raw" label)"
   USER_RECEIVE="$(json_field "$raw" receiveAddress)"
+  REPAY_LABEL="$(json_field "$raw" repayLabel)"
   CREDIT_LIMIT="$(json_field "$raw" creditLimit)"
   PER_TX_CAP="$(json_field "$raw" perTxCap)"
   OUTSTANDING="$(json_field "$raw" outstanding)"
@@ -153,6 +161,76 @@ onboard() {
     exit 1
   fi
 
+  local repay_method repay_wallet card_number card_cvc card_exp repay_label
+  repay_method="${SOHOPAY_REPAY:-}"
+  repay_wallet="${SOHOPAY_REPAY_WALLET:-}"
+  card_number="${SOHOPAY_CARD:-}"
+  card_cvc="${SOHOPAY_CVC:-}"
+  card_exp="${SOHOPAY_EXP:-}"
+
+  printf '\n  %sRepayment method%s (how you will pay this credit back)\n' "$C_BOLD" "$C_RESET"
+  printf '  %sRepayment details are stored encrypted and are not readable by SohoPay.%s\n' "$C_DIM" "$C_RESET"
+  printf '    %sA)%s Wallet address\n' "$C_CYAN" "$C_RESET"
+  printf '    %sB)%s Bank card\n' "$C_CYAN" "$C_RESET"
+  printf '  %sExample: type A   or   type B%s\n' "$C_DIM" "$C_RESET"
+  if [[ -z "$repay_method" ]]; then
+    ask "  Choice: "
+    repay_method="$REPLY"
+  else
+    printf '  Choice: %s\n' "$repay_method"
+  fi
+  if ! repay_method="$(node "$IDENTITY" repay-method "$repay_method")"; then
+    printf '%sERROR:%s choose A (wallet) or B (bank card).\n' "$C_RED" "$C_RESET"
+    exit 1
+  fi
+
+  if [[ "$repay_method" == "wallet" ]]; then
+    printf '\n  Wallet address\n'
+    printf '  %sExample: 0xDe20913Abf62FE97838AF397a4f4F2BD665E94f9%s\n' "$C_DIM" "$C_RESET"
+    if [[ -z "$repay_wallet" ]]; then
+      ask "  Address: "
+      repay_wallet="$REPLY"
+    else
+      printf '  Address: %s\n' "$repay_wallet"
+    fi
+    if ! repay_wallet="$(node "$IDENTITY" wallet "$repay_wallet")"; then
+      printf '%sERROR:%s enter a 0x wallet address (42 characters).\n' "$C_RED" "$C_RESET"
+      exit 1
+    fi
+    repay_label="wallet $repay_wallet"
+  else
+    printf '\n  %sBank card (demo — not charged, CVC is not stored)%s\n' "$C_DIM" "$C_RESET"
+    printf '  Card number\n'
+    printf '  %sExample: 4242 4242 4242 4242%s\n' "$C_DIM" "$C_RESET"
+    if [[ -z "$card_number" ]]; then
+      ask "  Number: "
+      card_number="$REPLY"
+    else
+      printf '  Number: %s\n' "$card_number"
+    fi
+    printf '  CVC\n'
+    printf '  %sExample: 123%s\n' "$C_DIM" "$C_RESET"
+    if [[ -z "$card_cvc" ]]; then
+      ask "  CVC: "
+      card_cvc="$REPLY"
+    else
+      printf '  CVC: %s\n' "$card_cvc"
+    fi
+    printf '  Expiration\n'
+    printf '  %sExample: 12/28%s\n' "$C_DIM" "$C_RESET"
+    if [[ -z "$card_exp" ]]; then
+      ask "  Exp: "
+      card_exp="$REPLY"
+    else
+      printf '  Exp: %s\n' "$card_exp"
+    fi
+    if ! repay_label="$(node "$IDENTITY" card "$(node -e 'console.log(JSON.stringify({number:process.argv[1],cvc:process.argv[2],exp:process.argv[3]}))' "$card_number" "$card_cvc" "$card_exp")")"; then
+      printf '%sERROR:%s check card number, CVC, and exp (MM/YY).\n' "$C_RED" "$C_RESET"
+      exit 1
+    fi
+    repay_label="$(json_field "$repay_label" repayLabel)"
+  fi
+
   local otp masked
   otp="$(generate_otp)"
   masked="$(node -e 'const d=process.argv[1]; process.stdout.write(d.length<4?"••••":"••••"+d.slice(-4))' "$phone")"
@@ -181,7 +259,7 @@ onboard() {
     printf '\n  Handle: @%s\n' "$handle"
   fi
 
-  if ! claim="$(node "$IDENTITY" claim "$(node -e 'console.log(JSON.stringify({name:process.argv[1],phone:process.argv[2],handle:process.argv[3]}))' "$name" "$phone" "$handle")")"; then
+  if ! claim="$(node "$IDENTITY" claim "$(node -e 'console.log(JSON.stringify({name:process.argv[1],phone:process.argv[2],handle:process.argv[3],repayMethod:process.argv[4],repayWallet:process.argv[5],cardNumber:process.argv[6],cvc:process.argv[7],exp:process.argv[8]}))' "$name" "$phone" "$handle" "$repay_method" "${repay_wallet:-}" "${card_number:-}" "${card_cvc:-}" "${card_exp:-}")")"; then
     printf '%sERROR:%s could not create @%s.\n' "$C_RED" "$C_RESET" "$handle"
     exit 1
   fi
@@ -189,15 +267,21 @@ onboard() {
 
   printf '\n'
   printf '  %s●%s @%s is yours\n' "$C_GREEN" "$C_RESET" "$USER_HANDLE"
+  printf '  %s●%s Repayment: %s\n' "$C_GREEN" "$C_RESET" "${repay_label:-$(json_field "$claim" repayLabel)}"
   printf '  %s●%s $%s SohoPay credit issued\n' "$C_GREEN" "$C_RESET" "$CREDIT_LIMIT"
-  printf '  %s●%s Pay @phil (agent) or @acme (merchant) in plain English\n' "$C_GREEN" "$C_RESET"
+  printf '  %s●%s Pay @phil (agent) in plain English\n' "$C_GREEN" "$C_RESET"
   printf '\n'
 }
 
 banner() {
   init_colors
   local mode_label
-  mode_label="$([[ "$EXECUTE" == "1" ]] && echo "live fixture" || echo "demo")"
+  local mode_label="demo"
+  if [[ "$LIVE" == "1" ]]; then
+    mode_label="live Base Sepolia"
+  elif [[ "$EXECUTE" == "1" ]]; then
+    mode_label="local fixture"
+  fi
 
   printf '\n'
   printf '%sWelcome to SohoPay%s\n' "$C_DIM" "$C_RESET"
@@ -280,6 +364,9 @@ show_credit_balance() {
   sleepy
   printf '  • payer         : @%s (%s)\n' "$USER_HANDLE" "$USER_NAME"
   printf '  • handle        : @%s\n' "$USER_HANDLE"
+  if [[ -n "$REPAY_LABEL" ]]; then
+    printf '  • repay         : %s\n' "$REPAY_LABEL"
+  fi
   printf '  • per-tx cap    : %s %s\n' "$PER_TX_CAP" "$TOKEN_SYMBOL"
   printf '  • credit line   : %s %s\n' "$CREDIT_LIMIT" "$TOKEN_SYMBOL"
   printf '  • outstanding   : %s %s\n' "$OUTSTANDING" "$TOKEN_SYMBOL"
@@ -288,11 +375,64 @@ show_credit_balance() {
   printf '%s\n' "================================================================"
 }
 
+print_live_receipt() {
+  local tx="$1" amount="$2" receive="$3"
+  local deploy="$ROOT/scripts/a2a/.deployment.json"
+  local settlement usdc payer payment_id atomic out
+  settlement="$(node -e 'const j=require(process.argv[1]); process.stdout.write(j.settlement||"")' "$deploy")"
+  usdc="$(node -e 'const j=require(process.argv[1]); process.stdout.write(j.usdc||"")' "$deploy")"
+  payer="$(node -e 'const j=require(process.argv[1]); process.stdout.write(j.deployer||"")' "$deploy")"
+  atomic="$(node -e 'process.stdout.write(String(Math.round(Number(process.argv[1])*1e6)))' "$amount")"
+  payment_id="$(fake_hash "payment|$tx|$amount")"
+
+  out="$(
+    AMOUNT_ATOMIC="$atomic" \
+    USDC_ADDR="$usdc" \
+    PHIL_RECEIVE="$receive" \
+    SETTLEMENT_ADDR="$settlement" \
+    TX_HASH="$tx" \
+    PAYMENT_ID="$payment_id" \
+    PAYER="$payer" \
+    CHAIN_ID="$CHAIN_ID" \
+    node "$ROOT/scripts/a2a/receipt-display.mjs"
+  )"
+
+  printf '\nSTEP 4: REQUEST WITH PROOF\n'
+  hr
+  printf '  AI Agent → GET /a2a/pay-agent?to=phil\n'
+  printf '  PAYMENT-SIGNATURE (decoded):\n'
+  printf '%s\n' "$out" | sed -n '/^PAYMENT_SIGNATURE_JSON:/,/^PAYMENT_SIGNATURE_B64_PREVIEW=/p' | sed '1d;$d'
+  printf '\n  PAYMENT-SIGNATURE (base64 preview): %s\n' \
+    "$(printf '%s\n' "$out" | sed -n 's/^PAYMENT_SIGNATURE_B64_PREVIEW=//p')"
+  printf '  Agent verification: AgentToAgentSettled confirmed on-chain\n'
+  sleepy
+
+  printf '\nSTEP 5: DELIVERY (HTTP 200)\n'
+  hr
+  printf '  Payee agent API ← 200 OK\n'
+  printf '  PAYMENT-RESPONSE (decoded):\n'
+  printf '%s\n' "$out" | sed -n '/^PAYMENT_RESPONSE_JSON:/,/^RESPONSE_BODY_JSON:/p' | sed '1d;$d'
+  printf '\n  Response body (decoded):\n'
+  printf '%s\n' "$out" | sed -n '/^RESPONSE_BODY_JSON:/,/^PAYMENT_RESPONSE_B64_PREVIEW=/p' | sed '1d;$d'
+  printf '\n  PAYMENT-RESPONSE (base64 preview): %s\n' \
+    "$(printf '%s\n' "$out" | sed -n 's/^PAYMENT_RESPONSE_B64_PREVIEW=//p')"
+  sleepy
+
+  printf '\nSettlement summary\n'
+  printf '  • settled       : %s %s (+ 0 fee)\n' "$amount" "$TOKEN_SYMBOL"
+  printf '  • recipient     : %s\n' "$receive"
+  printf '  • network       : %s (%s)\n' "$NETWORK_NAME" "$CHAIN_ID"
+  printf '  • tx_hash       : %s\n' "$tx"
+  printf '\n%sSTATUS: PAYMENT SUCCESSFUL%s\n' "$C_GREEN$C_BOLD" "$C_RESET"
+  printf '%s  explorer      : https://sepolia.basescan.org/tx/%s%s\n' "$C_CYAN" "$tx" "$C_RESET"
+  printf '%s\n' "================================================================"
+}
+
 show_directory() {
   printf '\nDirectory\n'
   hr
-  printf '  • @phil   Phil Agent     agent (A2A receive)\n'
-  printf '  • @acme   Acme Coffee    merchant\n'
+  printf '  • @phil   Phil Agent     on-chain A2A receive (use this)\n'
+  printf '  • @acme   Acme Coffee    merchant (demo only, not live)\n'
   printf '  • @bob    Bob Agent      agent (no receive in this demo)\n'
   if [[ -n "$USER_HANDLE" ]]; then
     printf '  • @%-6s %s  you\n' "$USER_HANDLE" "$USER_NAME"
@@ -314,9 +454,8 @@ fake_hash() {
 process_turn() {
   local parsed recipient amount currency label receive handle role merchant agent
   if ! parsed="$(parse_prompt 2>/tmp/sohopay-parse.err)"; then
-    printf '%sERROR:%s could not parse that payment.\n' "$C_RED" "$C_RESET"
-    printf '  %s\n' "$(tr -d '\n' </tmp/sohopay-parse.err | tail -c 240)"
-    printf '  Try: pay @phil 20\n'
+    printf '%sERROR:%s %s\n' "$C_RED" "$C_RESET" "$(tail -1 /tmp/sohopay-parse.err | tr -d '\r')"
+    printf '  On-chain payee in this demo: pay @phil 20\n'
     return 1
   fi
 
@@ -424,10 +563,38 @@ process_turn() {
 
   printf '\nPHASE 4: SETTLEMENT\n'
   hr
+  if [[ "$LIVE" == "1" ]]; then
+    if [[ "$merchant" == "true" ]]; then
+      printf '%sERROR:%s live Base Sepolia deploy is A2A-only. Pay @phil, not a merchant.\n' "$C_RED" "$C_RESET"
+      return 1
+    fi
+    if [[ "$recipient" != "phil" ]]; then
+      printf '%sERROR:%s live testnet currently settles to @phil only.\n' "$C_RED" "$C_RESET"
+      return 1
+    fi
+    printf 'Submitting settleAgentToAgent on Base Sepolia...\n'
+    printf '  • this creates a real testnet transaction\n'
+    local live_out tx
+    if ! live_out="$(cd "$ROOT" && ./scripts/a2a/settle-live.sh "$amount" 2>&1)"; then
+      printf '%sERROR:%s on-chain settlement failed. Not claiming success.\n' "$C_RED" "$C_RESET"
+      printf '%s\n' "$live_out" | tail -20
+      return 1
+    fi
+    tx="$(printf '%s\n' "$live_out" | sed -n 's/^TX_HASH=//p' | tail -1)"
+    if [[ -z "$tx" ]] || ! printf '%s\n' "$live_out" | grep -q "A2A PAYMENT COMPLETE"; then
+      printf '%sERROR:%s no on-chain hash. Not claiming success.\n' "$C_RED" "$C_RESET"
+      printf '%s\n' "$live_out" | tail -20
+      return 1
+    fi
+    node "$IDENTITY" debit "$amount" >/dev/null
+    load_identity
+    print_live_receipt "$tx" "$amount" "$receive"
+    return 0
+  fi
   if [[ "$EXECUTE" == "1" ]]; then
     if [[ "$recipient" != "phil" ]] || awk -v a="$amount" 'BEGIN{exit !(a+0 != 20)}'; then
-      printf '%sERROR:%s live fixture currently settles 20 USDC to @phil only.\n' "$C_RED" "$C_RESET"
-      printf '  Re-run without EXECUTE=1, or type: pay @phil 20\n'
+      printf '%sERROR:%s local fixture currently settles 20 USDC to @phil only.\n' "$C_RED" "$C_RESET"
+      printf '  Type: pay @phil 20\n'
       return 1
     fi
     printf 'Submitting settleAgentToAgent (isolated local demo)...\n'

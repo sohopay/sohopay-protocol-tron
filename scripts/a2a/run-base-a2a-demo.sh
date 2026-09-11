@@ -126,7 +126,10 @@ if [[ "$NETWORK" == "base-sepolia" ]]; then
   fi
 
   echo ">> broadcasting isolated A2A deploy + 20 USDC settle on Base Sepolia"
-  forge script script/DemoBaseA2A.s.sol:DemoBaseA2A \
+  export SKIP_A2A_BLOCKED_ACT=true
+  # Size profile keeps SohoSettlement under the 24KB EIP-170 limit (A2A additions
+  # push the default optimizer_runs=10000 artifact over 24576).
+  FOUNDRY_PROFILE=size forge script script/DemoBaseA2A.s.sol:DemoBaseA2A \
     --rpc-url "$BASE_SEPOLIA_RPC_URL" \
     --chain 84532 \
     --broadcast \

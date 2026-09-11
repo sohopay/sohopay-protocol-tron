@@ -51,7 +51,13 @@ function main() {
       ? args[jsonIdx + 1]
       : args.filter((a) => a !== "--execute" && a !== "--json").join(" ") ||
         "Pay Phil's agent $20";
-  const request = parsePaymentRequest(input);
+  let request;
+  try {
+    request = parsePaymentRequest(input);
+  } catch (err) {
+    console.error(err.message || String(err));
+    process.exit(1);
+  }
   if (!execute) {
     console.log(JSON.stringify(request, null, 2));
     return;

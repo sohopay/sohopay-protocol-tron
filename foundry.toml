@@ -22,6 +22,13 @@ runs = 256
 depth = 64
 fail_on_revert = false
 
+# Size-optimized compile for live Base Sepolia deploys. Default profile stays
+# optimizer_runs=10000 so local/audit bytecode is unchanged.
+[profile.size]
+optimizer_runs = 1
+bytecode_hash = "none"
+cbor_metadata = false
+
 [fmt]
 line_length = 110
 

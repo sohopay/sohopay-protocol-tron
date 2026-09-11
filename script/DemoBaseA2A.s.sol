@@ -87,7 +87,11 @@ contract DemoBaseA2A is Script {
         _act3_receive();
         _act4_fund();
         _act5_to_9_payPhil20();
-        _act10_blocked();
+        // On a live broadcast, a reverting settle is a failed tx and forge aborts
+        // before later receipts are useful. Keep the cap check for local runs.
+        if (!vm.envOr("SKIP_A2A_BLOCKED_ACT", false)) {
+            _act10_blocked();
+        }
         vm.stopBroadcast();
     }
 
